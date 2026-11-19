@@ -1,0 +1,5 @@
+## IDF component manager manifest. cJSON left ESP-IDF in v6.0 and now lives
+## in the component registry; mDNS has been a registry component since 5.0.
+dependencies:
+  espressif/cjson: "*"
+  espressif/mdns: "*"

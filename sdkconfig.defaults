@@ -1,0 +1,31 @@
+# COS-102 controller, ESP32-S31-Function-CoreBoard-1 (ESP32-S31-WROOM-3:
+# 16 MB quad flash, 16 MB octal PSRAM -- PSRAM is left off, nothing needs it).
+CONFIG_IDF_TARGET="esp32s31"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_320=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Console on UART0 (GPIO58/59 -> the CoreBoard's USB-to-UART port).
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# The bit-bang scan backend busy-loops on core 1 (diagnostics only); don't let
+# the idle-task watchdog trip while it runs.
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# Keep the whole network stack on core 0: core 1 owns the panel and has a hard
+# per-frame deadline (a missed slot = stutter + brightness pulsing).
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+CONFIG_LWIP_MAX_SOCKETS=10
+
+# Web server: websocket state push + generous headers.
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# The scan feeder's done-callback runs in the PARLIO ISR; keep it in IRAM so
+# flash operations (NVS writes on "Save") can't stall the scan.
+CONFIG_PARLIO_TX_ISR_HANDLER_IN_IRAM=y
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

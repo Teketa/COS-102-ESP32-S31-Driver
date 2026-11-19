@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>COS-102 LED Sign</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
+  --fg:#e6edf3; --dim:#8b949e; --accent:#3fb950; --accent2:#58a6ff; --warn:#d29922;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;
+  background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
+header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.3px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
+.dot.off{background:#f85149}
+.stat{margin-left:auto;color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+main{max-width:1080px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.card h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.transport{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+  border-radius:9px;padding:9px 14px;cursor:pointer;font-size:14px;transition:.12s}
+button:hover{border-color:var(--accent2);background:#222a3a}
+button.icon{min-width:44px;font-size:16px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#04260d;font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button.on{background:var(--accent2);border-color:var(--accent2);color:#03192e;font-weight:600}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:90px}
+.fxpick{display:flex;gap:8px;align-items:center}
+.fxpick select{flex:1;min-width:0;font-size:16px;padding:12px}
+label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+input[type=text],input[type=password],textarea,select{width:100%;background:var(--bg);
+  color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
+textarea{resize:vertical;min-height:58px}
+input[type=range]{width:100%;accent-color:var(--accent2)}
+input[type=color]{width:100%;height:40px;background:none;border:1px solid var(--line);
+  border-radius:9px;padding:2px;cursor:pointer}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.field{min-width:0}
+.val{float:right;color:var(--fg);font-variant-numeric:tabular-nums}
+.hide{display:none}
+.sw{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;padding:6px 0}
+.sw input{accent-color:var(--accent);width:17px;height:17px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--accent2);color:#03192e;padding:10px 18px;border-radius:20px;
+  font-weight:600;transition:.25s;pointer-events:none;opacity:0}
+#toast.show{transform:translateX(-50%);opacity:1}
+.banner{background:var(--warn);color:#221a02;padding:12px 16px;border-radius:var(--radius);font-weight:600}
+.aps button{width:100%;text-align:left;margin-bottom:6px;display:flex;justify-content:space-between}
+small{color:var(--dim)}
+.beatstat{display:flex;align-items:center;gap:10px;margin:0 0 14px;font-weight:600}
+.bdot{width:11px;height:11px;border-radius:50%;background:#f85149;flex:none}
+.bdot.ok{background:var(--accent)} .bdot.idle{background:var(--warn)}
+.smplist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.smplist h3{font-size:12px;color:var(--dim);margin:10px 0 2px;font-weight:600}
+.srow{display:grid;grid-template-columns:42px 1fr 48px 132px 44px;gap:8px;align-items:center;
+  padding:4px;border-radius:9px;border:1px solid transparent;transition:.15s}
+.srow .sn{color:var(--dim);font-variant-numeric:tabular-nums;text-align:right}
+.srow input[type=color]{height:38px}
+.srow button{padding:8px 0}
+.srow.last{border-color:var(--accent2)}
+.srow.playing{background:#14361f;border-color:var(--accent)}
+.srow.playing .sn{color:var(--accent);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1>COS-102 LED Sign <small>· ESP32-S31</small></h1>
+  <div class="stat">
+    <span id="s-res">200×30</span>
+    <span id="s-fps">– fps</span>
+    <span id="s-ip"></span>
+    <span id="s-heap"></span>
+  </div>
+</header>
+
+<main>
+  <div id="apbanner" class="banner hide">
+    Setup mode — no WiFi connected. Enter your network below to put the sign online.
+  </div>
+
+  <div class="card">
+    <h2>Control</h2>
+    <div class="transport">
+      <button class="icon" id="b-prev" title="Previous effect">⏮</button>
+      <button class="icon primary" id="b-play" title="Play/pause">⏸</button>
+      <button class="icon" id="b-next" title="Next effect">⏭</button>
+      <button class="icon" id="b-power" title="Blank the display">⏻</button>
+      <div class="field" style="flex:1;min-width:160px">
+        <label>Brightness <span class="val" id="v-bri"></span></label>
+        <input type="range" id="r-bri" min="1" max="255">
+      </div>
+      <div class="field" style="flex:1;min-width:160px">
+        <label>Speed <span class="val" id="v-spd"></span></label>
+        <input type="range" id="r-spd" min="1" max="100">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button data-tab="effects">✨ Animation</button>
+      <button data-tab="text">🔤 Text</button>
+      <button data-tab="clock">🕐 Clock</button>
+      <button data-tab="beat">🎧 Beat</button>
+      <button data-tab="samples">🔊 Samples</button>
+      <button data-tab="settings">⚙️ Settings</button>
+      <button data-tab="advanced">🔬 Advanced</button>
+    </div>
+  </div>
+
+  <div class="card tab" id="tab-effects">
+    <h2>Animation</h2>
+    <div class="fxpick">
+      <button class="icon" id="b-fxprev" title="Previous animation">‹</button>
+      <select id="s-fx" aria-label="Animation"></select>
+      <button class="icon" id="b-fxnext" title="Next animation">›</button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <label class="sw"><input type="checkbox" id="c-playlist"> Auto-cycle effects</label>
+      <div class="field">
+        <label>Seconds per effect <span class="val" id="v-plsec"></span></label>
+        <input type="range" id="r-plsec" min="3" max="120">
+      </div>
+    </div>
+  </div>
+
+  <div class="card tab hide" id="tab-text">
+    <h2>Text</h2>
+    <div class="field"><label>Message</label>
+      <textarea id="t-text" maxlength="190" placeholder="Type your message…"></textarea></div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Animation</label><select id="s-anim"></select></div>
+      <div class="field"><label>Size <span class="val" id="v-scale"></span></label>
+        <input type="range" id="r-scale" min="1" max="4"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Text color</label><input type="color" id="c-fg"></div>
+      <div class="field"><label>Background</label><input type="color" id="c-bg"></div>
+    </div>
+    <div style="margin-top:12px"><button class="primary" id="b-showtext">Show this text</button></div>
+  </div>
+
+  <div class="card tab hide" id="tab-clock">
+    <h2>Clock</h2>
+    <div class="row">
+      <label class="sw"><input type="checkbox" id="c-24"> 24-hour format</label>
+      <label class="sw"><input type="checkbox" id="c-sec"> Show seconds</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Timezone</label>
+        <select id="s-tz">
+          <option value="CET-1CEST,M3.5.0,M10.5.0/3">Europe/Copenhagen</option>
+          <option value="GMT0BST,M3.5.0/1,M10.5.0">Europe/London</option>
+          <option value="EST5EDT,M3.2.0,M11.1.0">US Eastern</option>
+          <option value="CST6CDT,M3.2.0,M11.1.0">US Central</option>
+          <option value="PST8PDT,M3.2.0,M11.1.0">US Pacific</option>
+          <option value="UTC0">UTC</option>
+        </select></div>
+      <div class="field"><label>Digit size <span class="val" id="v-cscale"></span></label>
+        <input type="range" id="r-cscale" min="1" max="4"></div>
+    </div>
+    <p><small id="timestat"></small></p>
+    <button class="primary" id="b-showclock">Show clock</button>
+  </div>
+
+  <div class="card tab hide" id="tab-beat">
+    <h2>DJ beat sync · Mixxx</h2>
+    <p class="beatstat"><span class="bdot" id="bdot"></span><span id="beatstat">–</span></p>
+    <div class="row">
+      <label class="sw"><input type="checkbox" id="c-ben"> Follow the Mixxx beat</label>
+      <label class="sw"><input type="checkbox" id="c-btempo"> Tempo lock (animation speed follows BPM)</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Latency offset <span class="val" id="v-boff"></span></label>
+        <input type="range" id="r-boff" min="-150" max="150" step="5">
+        <small>Flash comes before the kick: move right. After the kick: move left.</small></div>
+      <div class="field"><label>Beat pulse on every animation <span class="val" id="v-bpulse"></span></label>
+        <input type="range" id="r-bpulse" min="0" max="100" step="5">
+        <small>Dims between beats, whatever is showing.</small></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Change animation</label>
+        <select id="s-bbars">
+          <option value="0">Never</option><option value="4">Every 4 bars</option>
+          <option value="8">Every 8 bars</option><option value="16">Every 16 bars</option>
+          <option value="32">Every 32 bars</option>
+        </select></div>
+      <div class="field"><label>Pick from</label>
+        <select id="s-bpool">
+          <option value="0">Beat-synced animations</option><option value="1">All animations</option>
+        </select></div>
+    </div>
+    <label class="sw" style="margin-top:8px"><input type="checkbox" id="c-bdeck"> Also change when the on-air deck changes</label>
+    <div class="transport"><button class="primary" id="b-beatfx">Show a beat animation</button></div>
+    <p style="margin-top:12px"><small>Needs the COS102 bridge running on the DJ laptop and the
+      “COS102 LED Sign” mapping enabled in Mixxx (Preferences → Controllers).
+      Beat animations free-run at 120 BPM when Mixxx isn't connected.</small></p>
+  </div>
+
+  <div class="card tab hide" id="tab-samples">
+    <h2>Sample texts</h2>
+    <p class="beatstat"><span class="bdot" id="sdot"></span><span id="smpstat">Hit a sample pad to see its sampler number</span></p>
+    <label class="sw"><input type="checkbox" id="c-smp"> Show sample texts</label>
+    <p style="margin-top:4px"><small>While a Mixxx sampler plays, its text takes over the sign; it
+      disappears when the sample ends. Hit a pad and its row lights up here.
+      Leave a text empty to show nothing for that sampler. ▶ previews a row on the sign.</small></p>
+    <div class="smplist" id="smplist"></div>
+    <div class="transport"><button class="primary" id="b-smpsave">💾 Save to flash</button></div>
+  </div>
+
+  <div class="card tab hide" id="tab-settings">
+    <h2>Display</h2>
+    <div class="row">
+      <div class="field"><label>Frame rate <span class="val" id="v-fps"></span></label>
+        <input type="range" id="r-fps" min="5" max="200">
+        <small>Above ~60 the limit is the data send (see the Advanced tab's
+        core-1 budget); the engine auto-limits to a rate it can pace
+        regularly rather than dropping frames.</small></div>
+      <div class="field"><label>Primary color</label><input type="color" id="c-fg2"></div>
+      <div class="field"><label>Background color</label><input type="color" id="c-bg2"></div>
+    </div>
+
+    <h2 style="margin-top:20px">WiFi</h2>
+    <div class="row">
+      <div class="field"><label>Network</label><input type="text" id="i-ssid" placeholder="SSID"></div>
+      <div class="field"><label>Password</label><input type="password" id="i-pass" placeholder="••••••••"></div>
+    </div>
+    <div class="transport">
+      <button id="b-scan">Scan networks</button>
+      <button class="primary" id="b-wifi">Connect</button>
+      <button id="b-forget">Forget</button>
+    </div>
+    <div class="aps" id="aplist" style="margin-top:10px"></div>
+
+    <h2 style="margin-top:20px">System</h2>
+    <div class="transport">
+      <button class="primary" id="b-save">💾 Save to flash</button>
+      <button id="b-defaults">Reset defaults</button>
+      <button id="b-reboot">Reboot</button>
+    </div>
+    <p style="margin-top:12px"><small>
+      REST API: <code>GET/POST /api/state</code>, <code>POST /api/action</code>
+      {play,pause,next,prev,save,blank,reboot}, <code>POST /api/wifi</code>,
+      <code>GET /api/scan</code>, <code>POST /api/cmd</code> (console command),
+      WebSocket <code>/ws</code> (state push).
+    </small></p>
+  </div>
+  <div class="card tab hide" id="tab-advanced">
+    <h2>Render engine</h2>
+    <p><small>Test patterns and raw protocol commands need manual control —
+       the UI render engine overwrites the panel every frame.</small></p>
+    <div class="transport">
+      <button id="b-ui-off">🛑 Take manual control</button>
+      <button class="primary" id="b-ui-on">▶ Resume UI control</button>
+      <span id="uistate" class="val"></span>
+    </div>
+
+    <h2 style="margin-top:20px">Overclock</h2>
+    <p><small>Drivers are rated 30 MHz; with the S3 controller <strong>this
+       panel ran stable to ~19.5–20 MHz on both clocks</strong> — the ceiling
+       is its HC244 buffers and ribbon, not the driver ICs. The S31 hat adds
+       33&nbsp;Ω series resistors, so re-check the limit here.<br>
+       On the S31 the GCLK comes from a 160&nbsp;MHz PLL through an integer
+       divider, so it snaps to 40, 26.7, <strong>20</strong>, 16, 13.3,
+       11.4, 10&nbsp;MHz…; the slider jumps to the rate actually set.</small></p>
+    <div class="row">
+      <div class="field"><label>GCLK — grayscale clock <span class="val" id="v-gclk"></span></label>
+        <input type="range" id="r-gclk" min="4" max="30" step="0.1"></div>
+      <div class="field"><label>Data clock (quad-SPI) <span class="val" id="v-data"></span></label>
+        <input type="range" id="r-data" min="2" max="30" step="0.5"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>GCLK pulses per phase <span class="val" id="v-burst"></span></label>
+        <input type="range" id="r-burst" min="64" max="2048" step="1"></div>
+      <div class="field"><label>First-burst pad <span class="val" id="v-pad"></span></label>
+        <input type="range" id="r-pad" min="0" max="24"></div>
+    </div>
+    <p style="margin-top:10px">
+      Panel refresh: <strong id="v-refresh">–</strong> ·
+      frame rate: <strong id="v-fpsa">–</strong><br>
+      <small>Higher GCLK = faster PWM refresh (less flicker on camera). Fewer
+      pulses per phase = higher refresh but less grayscale depth. Watch for
+      artifacts; <em>Reset OEM timing</em> restores the known-good values.</small>
+    </p>
+    <div class="transport">
+      <button class="primary" id="b-oc-fast">⚡ Fast preset (20 MHz)</button>
+      <button id="b-oc-reset">↺ OEM-like timing (≈12.5 MHz)</button>
+      <button id="b-oc-save">💾 Keep after reboot</button>
+    </div>
+
+    <h2 style="margin-top:20px">Current state</h2>
+    <pre id="advstate" style="background:#0a0d12;border:1px solid var(--line);border-radius:9px;
+      padding:12px;margin:0;font-size:12px;white-space:pre-wrap;color:var(--dim)"></pre>
+
+    <h2 style="margin-top:20px">Backends</h2>
+    <div class="transport">
+      <span>Scan:</span>
+      <button class="cmd" data-cmd="scan backend parlio">PARLIO DMA</button>
+      <button class="cmd" data-cmd="scan backend timer">bit-bang</button>
+      <button class="cmd" data-cmd="scan start">start</button>
+      <button class="cmd" data-cmd="scan stop">stop</button>
+    </div>
+    <div class="transport">
+      <span>Data:</span>
+      <button class="cmd" data-cmd="data backend qspi">quad-SPI</button>
+      <button class="cmd" data-cmd="data backend bitbang">bit-bang</button>
+      <button class="cmd" data-cmd="data niborder 0">nibble order 0</button>
+      <button class="cmd" data-cmd="data niborder 1">nibble order 1</button>
+    </div>
+
+    <h2 style="margin-top:20px">Test patterns</h2>
+    <div class="transport">
+      <button class="cmd" data-cmd="pat border">border</button>
+      <button class="cmd" data-cmd="pat checker 4">checker</button>
+      <button class="cmd" data-cmd="pat gradx">gradient</button>
+      <button class="cmd" data-cmd="pat cols">columns</button>
+      <button class="cmd" data-cmd="pat rows">rows</button>
+      <button class="cmd" data-cmd="pat solid ffff ffff ffff">white</button>
+      <button class="cmd" data-cmd="pat solid ffff 0 0">red</button>
+      <button class="cmd" data-cmd="pat solid 0 ffff 0">green</button>
+      <button class="cmd" data-cmd="pat solid 0 0 ffff">blue</button>
+      <button class="cmd" data-cmd="raw clear">clear</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Single pixel — x</label><input type="text" id="px-x" value="10"></div>
+      <div class="field"><label>y</label><input type="text" id="px-y" value="10"></div>
+      <div class="field"><label>&nbsp;</label><button id="b-px">Light pixel</button></div>
+    </div>
+
+    <h2 style="margin-top:20px">Protocol probes</h2>
+    <div class="row">
+      <div class="field"><label>Walk slot (ws) 0–127</label><input type="text" id="w-ws" value="0"></div>
+      <div class="field"><label>Walk word (ww) 0–49</label><input type="text" id="w-ww" value="0"></div>
+      <div class="field"><label>Bit (wb) slot,word</label><input type="text" id="w-wb" value="0 0"></div>
+    </div>
+    <div class="transport">
+      <button id="b-ws">ws</button><button id="b-ww">ww</button><button id="b-wb">wb</button>
+      <button class="cmd primary" data-cmd="boot">↻ Re-init drivers</button>
+      <button class="cmd" data-cmd="vsync">vsync</button>
+      <button class="cmd" data-cmd="preamble">preamble</button>
+      <button class="cmd" data-cmd="send">send frame</button>
+      <button class="cmd" data-cmd="status">status</button>
+      <button class="cmd" data-cmd="pintest 6">pin test</button>
+    </div>
+
+    <h2 style="margin-top:20px">Protocol settings</h2>
+    <div class="transport">
+      <button class="cmd" data-cmd="set nlat 128">nlat 128</button>
+      <button class="cmd" data-cmd="set nlat 127">nlat 127</button>
+      <button class="cmd" data-cmd="set latchcode 1">latch code 1</button>
+      <button class="cmd" data-cmd="set latchcode 0">latch code 0</button>
+      <button class="cmd" data-cmd="set gclkstop 1">GCLK stop on</button>
+      <button class="cmd" data-cmd="set gclkstop 0">GCLK stop off</button>
+      <button class="cmd" data-cmd="preamble on">preamble/frame on</button>
+      <button class="cmd" data-cmd="preamble off">preamble/frame off</button>
+    </div>
+    <div class="transport" style="margin-top:8px">
+      <button class="cmd" data-cmd="map">show mapping</button>
+      <button class="cmd" data-cmd="map reset">reset mapping</button>
+      <button class="cmd" data-cmd="map set mirrorx 1">mirror X</button>
+      <button class="cmd" data-cmd="map set flipy 1">flip Y</button>
+      <button class="cmd" data-cmd="map set lsbfirst 1">LSB-first</button>
+    </div>
+
+    <h2 style="margin-top:20px">Terminal</h2>
+    <p><small>Every serial console command works here — type <code>help</code> for the list.</small></p>
+    <div class="transport">
+      <input type="text" id="cmdline" placeholder="e.g. oc gclk 20   ·   ws 24   ·   status"
+             style="flex:1;min-width:220px" autocomplete="off" spellcheck="false">
+      <button class="primary" id="b-run">Run</button>
+    </div>
+    <pre id="cmdout" style="background:#0a0d12;border:1px solid var(--line);border-radius:9px;
+      padding:12px;margin-top:10px;max-height:280px;overflow:auto;font-size:12px;
+      white-space:pre-wrap"></pre>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// Bump when the page changes; shown in the Advanced state block so a stale
+// cached page is immediately obvious.
+const UI_BUILD = 's31-3';
+const $ = s => document.querySelector(s);
+let S = {}, busy = false, lists = null, wsAlive = false;
+
+function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove('show'), 1600); }
+
+const hex = a => '#' + a.map(v=>v.toString(16).padStart(2,'0')).join('');
+const unhex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+
+async function post(url, body){
+  try{
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)});
+    const j = await r.json();
+    if(j && j.mode !== undefined) apply(j, false);
+    return j;
+  }catch(e){ toast('Connection lost'); }
+}
+const set = o => post('/api/state', o);
+const act = a => post('/api/action', {action:a});
+
+function apply(s, withLists){
+  S = Object.assign(S, s);
+  $('#s-fps').textContent = (s.fps_actual||0).toFixed(1) + ' fps';
+  $('#s-ip').textContent = s.ip || '';
+  $('#s-heap').textContent = s.heap ? (s.heap/1024|0) + ' KB free' : '';
+  $('#dot').className = 'dot' + (s.mode === 3 ? ' off' : '');
+  $('#apbanner').classList.toggle('hide', !s.ap_mode);
+  if(s.ap_mode) showTab('settings');
+  $('#r-bri').value = s.brightness; $('#v-bri').textContent = Math.round(s.brightness/2.55)+'%';
+  $('#r-spd').value = s.speed; $('#v-spd').textContent = s.speed;
+  $('#r-fps').value = s.fps;
+  $('#v-fps').textContent = s.fps + ' fps' + (s.fps_eff < s.fps ? ' → ' + s.fps_eff : '');
+  $('#r-plsec').value = s.playlist_secs; $('#v-plsec').textContent = s.playlist_secs+'s';
+  $('#r-scale').value = s.font_scale; $('#v-scale').textContent = s.font_scale+'×';
+  $('#r-cscale').value = s.font_scale; $('#v-cscale').textContent = s.font_scale+'×';
+  $('#b-play').textContent = s.paused ? '▶' : '⏸';
+  $('#c-playlist').checked = s.playlist;
+  $('#c-24').checked = s.clock24; $('#c-sec').checked = s.clock_seconds;
+  if(document.activeElement !== $('#t-text')) $('#t-text').value = s.text || '';
+  $('#c-fg').value = $('#c-fg2').value = hex(s.fg);
+  $('#c-bg').value = $('#c-bg2').value = hex(s.bg);
+  if(s.tz) $('#s-tz').value = s.tz;
+  if(!$('#i-ssid').value && s.ssid) $('#i-ssid').value = s.ssid;
+  $('#timestat').textContent = s.time_ok ? 'Time synced via NTP.' : 'Waiting for NTP time sync…';
+  if(s.gclk_mhz !== undefined && document.activeElement.type !== 'range'){
+    $('#r-gclk').value = s.gclk_mhz; $('#v-gclk').textContent = s.gclk_mhz.toFixed(1)+' MHz';
+    $('#r-data').value = s.data_mhz; $('#v-data').textContent = s.data_mhz.toFixed(1)+' MHz';
+    $('#r-burst').value = s.burst;   $('#v-burst').textContent = s.burst;
+    $('#r-pad').value = s.pad;       $('#v-pad').textContent = s.pad;
+  }
+  if(s.refresh_hz !== undefined){
+    $('#v-refresh').textContent = Math.round(s.refresh_hz) + ' Hz';
+    $('#v-fpsa').textContent = (s.fps_actual||0).toFixed(1) + ' fps';
+  }
+  if(s.beat_enabled !== undefined) applyBeat(s);
+  if(s.ui_active !== undefined) updUi(s.ui_active);
+  if(s.scan_backend !== undefined) syncAdvanced(s);
+  if(withLists && s.effects){
+    lists = s;
+    const fx = $('#s-fx'); fx.innerHTML = '';
+    const beatSet = new Set(s.beat_fx || []), artSet = new Set(s.art_fx || []),
+          themeSet = new Set(s.theme_fx || []);
+    const groups = [['Animations', i=>!beatSet.has(i) && !artSet.has(i) && !themeSet.has(i)],
+                    ['3D & Shapes', i=>artSet.has(i)], ['Horses & Party', i=>themeSet.has(i)],
+                    ['Beat-synced', i=>beatSet.has(i)]];
+    groups.forEach(([label, pick])=>{
+      const g = document.createElement('optgroup'); g.label = label;
+      s.effects.forEach((n,i)=>{ if(!pick(i)) return;
+        const o=document.createElement('option'); o.value=i; o.textContent=n; g.appendChild(o); });
+      if(g.children.length) fx.appendChild(g);
+    });
+    lists.beatFirst = (s.beat_fx || [])[0];
+    const sel = $('#s-anim'); sel.innerHTML = '';
+    s.textanims.forEach((n,i)=>{ const o=document.createElement('option');
+      o.value=i; o.textContent=n; sel.appendChild(o); });
+  }
+  if(lists){ markFx(S.effect); $('#s-anim').value = S.text_anim; }
+}
+function applyBeat(s){
+  $('#c-ben').checked = s.beat_enabled;
+  $('#c-btempo').checked = s.beat_tempo_lock;
+  $('#c-bdeck').checked = s.beat_on_deck;
+  if(document.activeElement !== $('#r-boff')){ $('#r-boff').value = s.beat_offset; }
+  $('#v-boff').textContent = (s.beat_offset > 0 ? '+' : '') + s.beat_offset + ' ms';
+  if(document.activeElement !== $('#r-bpulse')){ $('#r-bpulse').value = s.beat_pulse; }
+  $('#v-bpulse').textContent = s.beat_pulse ? s.beat_pulse + '%' : 'off';
+  $('#s-bbars').value = s.beat_auto_bars; $('#s-bpool').value = s.beat_auto_pool;
+  let txt, cls = '';
+  if(!s.beat_enabled){ txt = 'Beat sync is off'; }
+  else if(s.beat_synced){ cls = 'ok';
+    txt = `Synced to Mixxx · ${s.beat_bpm.toFixed(1)} BPM · deck ${s.beat_deck}`; }
+  else if(s.beat_age < 0){ txt = 'No beat reports yet — start the bridge on the DJ laptop'; }
+  else if(s.beat_age > 3000){ txt = `Lost the bridge (last report ${(s.beat_age/1000).toFixed(0)} s ago)`; }
+  else { cls = 'idle'; txt = 'Bridge connected — nothing playing in Mixxx'; }
+  $('#beatstat').textContent = txt; $('#bdot').className = 'bdot ' + cls;
+}
+function markFx(i){
+  if(document.activeElement !== $('#s-fx')) $('#s-fx').value = i;
+}
+// --- sample texts
+let smpLoaded = false, smpPoll = null;
+async function loadSamples(){
+  const j = await fetch('/api/samples').then(r=>r.json()).catch(()=>null);
+  if(!j) return;
+  smpLoaded = true;
+  $('#c-smp').checked = j.enabled;
+  const box = $('#smplist'); box.innerHTML = '';
+  j.slots.forEach((sl, i)=>{
+    const n = i + 1;
+    if(i % 8 === 0){ const h = document.createElement('h3');
+      h.textContent = `Samplers ${n}–${n + 7}`; box.appendChild(h); }
+    const row = document.createElement('div'); row.className = 'srow'; row.id = 'srow' + n;
+    row.innerHTML = `<span class="sn">#${n}</span>
+      <input type="text" maxlength="23" placeholder="e.g. SHOTS" spellcheck="false">
+      <input type="color"><select></select>
+      <button title="Preview on the sign">▶</button>`;
+    const [txt, col, sty] = row.querySelectorAll('input[type=text],input[type=color],select');
+    row.querySelector('button').onclick = ()=>{
+      if(!txt.value){ toast('Type a text first'); return; }
+      post('/api/samples', {n, t: txt.value, c: unhex(col.value), s: +sty.value, preview: n}); };
+    j.styles.forEach((name, k)=>{ const o = document.createElement('option');
+      o.value = k; o.textContent = name; sty.appendChild(o); });
+    txt.value = sl.t; col.value = hex(sl.c); sty.value = sl.s;
+    const push = ()=>post('/api/samples', {n, t: txt.value, c: unhex(col.value), s: +sty.value});
+    let tmr; txt.addEventListener('input', ()=>{ clearTimeout(tmr); tmr = setTimeout(push, 250); });
+    col.addEventListener('change', push); sty.addEventListener('change', push);
+    box.appendChild(row);
+  });
+}
+async function pollSamples(){
+  const j = await fetch('/api/samples/live').then(r=>r.json()).catch(()=>null);
+  if(!j) return;
+  const hi = parseInt(j.mask.slice(0, 8), 16), lo = parseInt(j.mask.slice(8), 16);
+  const on = n => n <= 32 ? (lo >>> (n - 1)) & 1 : (hi >>> (n - 33)) & 1;
+  const playing = [];
+  for(let n = 1; n <= 64; n++) if(on(n)) playing.push(n);
+  document.querySelectorAll('.srow').forEach(r=>{ const n = +r.id.slice(4);
+    r.classList.toggle('playing', on(n) === 1); r.classList.toggle('last', n === j.last); });
+  let txt, cls = '';
+  if(playing.length){ cls = 'ok'; txt = 'Playing: sampler ' + playing.map(n=>'#' + n).join(', '); }
+  else if(j.last){ cls = 'idle'; txt = `Last pad: sampler #${j.last}`; }
+  else txt = 'Hit a sample pad to see its sampler number';
+  $('#smpstat').textContent = txt; $('#sdot').className = 'bdot ' + cls;
+}
+$('#c-smp').onchange = e => post('/api/samples', {enabled: e.target.checked});
+$('#b-smpsave').onclick = async()=>{ await act('save'); toast('Saved to flash'); };
+
+function showTab(name){
+  if(name === 'samples'){ if(!smpLoaded) loadSamples();
+    if(!smpPoll){ pollSamples(); smpPoll = setInterval(pollSamples, 300); } }
+  else if(smpPoll){ clearInterval(smpPoll); smpPoll = null; }
+  document.querySelectorAll('.tab').forEach(t=>t.classList.add('hide'));
+  $('#tab-'+name).classList.remove('hide');
+  document.querySelectorAll('.tabs button').forEach(b=>
+    b.classList.toggle('on', b.dataset.tab === name));
+}
+
+// --- state socket (no pixel streaming: see webserver.c state_task)
+function connectWS(){
+  const ws = new WebSocket('ws://' + location.host + '/ws');
+  ws.onmessage = e => {
+    try{ apply(JSON.parse(e.data), false); $('#dot').classList.remove('off'); }
+    catch(err){}
+  };
+  ws.onopen = () => { wsAlive = true; };
+  ws.onclose = () => { wsAlive = false; setTimeout(connectWS, 2000); };
+}
+
+// --- wiring
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+$('#b-play').onclick = ()=>act('toggle');
+$('#b-next').onclick = ()=>act('next');
+$('#b-prev').onclick = ()=>act('prev');
+$('#b-power').onclick = ()=>set({mode: S.mode === 3 ? 0 : 3});
+const live = (el, fn, ev='input') => el.addEventListener(ev, ()=>{ if(!busy){ busy=1;
+  fn(); setTimeout(()=>busy=0, 60);} });
+live($('#r-bri'), ()=>{ $('#v-bri').textContent = Math.round($('#r-bri').value/2.55)+'%';
+  set({brightness:+$('#r-bri').value}); });
+live($('#r-spd'), ()=>{ $('#v-spd').textContent = $('#r-spd').value;
+  set({speed:+$('#r-spd').value}); });
+live($('#r-fps'), ()=>{ $('#v-fps').textContent = $('#r-fps').value + ' fps';
+  set({fps:+$('#r-fps').value}); });
+live($('#r-plsec'), ()=>{ $('#v-plsec').textContent = $('#r-plsec').value+'s';
+  set({playlist_secs:+$('#r-plsec').value}); });
+live($('#r-scale'), ()=>{ $('#v-scale').textContent = $('#r-scale').value+'×';
+  set({font_scale:+$('#r-scale').value}); });
+live($('#r-cscale'), ()=>{ $('#v-cscale').textContent = $('#r-cscale').value+'×';
+  set({font_scale:+$('#r-cscale').value}); });
+$('#c-playlist').onchange = e => set({playlist:e.target.checked});
+$('#c-24').onchange = e => set({clock24:e.target.checked});
+$('#c-sec').onchange = e => set({clock_seconds:e.target.checked});
+$('#s-tz').onchange = e => { set({tz:e.target.value}); toast('Timezone set'); };
+$('#s-anim').onchange = e => set({mode:1, text_anim:+e.target.value});
+$('#s-fx').onchange = e => set({mode:0, effect:+e.target.value});
+$('#c-ben').onchange = e => set({beat_enabled:e.target.checked});
+$('#c-btempo').onchange = e => set({beat_tempo_lock:e.target.checked});
+$('#c-bdeck').onchange = e => set({beat_on_deck:e.target.checked});
+$('#s-bbars').onchange = e => set({beat_auto_bars:+e.target.value});
+$('#s-bpool').onchange = e => set({beat_auto_pool:+e.target.value});
+live($('#r-boff'), ()=>{ const v=+$('#r-boff').value;
+  $('#v-boff').textContent = (v > 0 ? '+' : '') + v + ' ms'; set({beat_offset:v}); });
+live($('#r-bpulse'), ()=>{ const v=+$('#r-bpulse').value;
+  $('#v-bpulse').textContent = v ? v + '%' : 'off'; set({beat_pulse:v}); });
+$('#b-beatfx').onclick = ()=>{ if(lists && lists.beatFirst !== undefined){
+  set({mode:0, effect:lists.beatFirst}); toast('Showing a beat animation'); } };
+$('#b-fxprev').onclick = ()=>{ if(S.mode !== 0) set({mode:0}); act('prev'); };
+$('#b-fxnext').onclick = ()=>{ if(S.mode !== 0) set({mode:0}); act('next'); };
+$('#t-text').oninput = () => set({text:$('#t-text').value});
+$('#b-showtext').onclick = ()=>{ set({mode:1, text:$('#t-text').value,
+  text_anim:+$('#s-anim').value}); toast('Showing text'); };
+$('#b-showclock').onclick = ()=>{ set({mode:2}); toast('Showing clock'); };
+[['#c-fg','fg'],['#c-fg2','fg'],['#c-bg','bg'],['#c-bg2','bg']].forEach(([sel,key])=>
+  $(sel).addEventListener('input', e=>set({[key]:unhex(e.target.value)})));
+$('#b-save').onclick = async()=>{ await act('save'); toast('Saved to flash'); };
+$('#b-defaults').onclick = async()=>{ if(confirm('Reset all settings?')){
+  await act('defaults'); toast('Defaults restored'); } };
+$('#b-reboot').onclick = ()=>{ if(confirm('Reboot the sign?')){ act('reboot');
+  toast('Rebooting…'); } };
+$('#b-wifi').onclick = async()=>{ await post('/api/wifi',
+  {ssid:$('#i-ssid').value, pass:$('#i-pass').value});
+  toast('Connecting — check the sign\'s serial output for its new IP'); };
+$('#b-forget').onclick = async()=>{ if(confirm('Forget WiFi and start setup AP?')){
+  await post('/api/wifi', {forget:true}); } };
+$('#b-scan').onclick = async()=>{
+  toast('Scanning…');
+  const r = await fetch('/api/scan').then(r=>r.json()).catch(()=>null);
+  const box = $('#aplist'); box.innerHTML = '';
+  (r && r.aps || []).sort((a,b)=>b.rssi-a.rssi).forEach(ap=>{
+    const b = document.createElement('button');
+    b.innerHTML = `<span>${ap.lock?'🔒':'🔓'} ${ap.ssid}</span><span>${ap.rssi} dBm</span>`;
+    b.onclick = ()=>{ $('#i-ssid').value = ap.ssid; $('#i-pass').focus(); };
+    box.appendChild(b);
+  });
+};
+
+// --- advanced tab
+async function runCmd(cmd, quiet){
+  const box = $('#cmdout');
+  try{
+    const j = await fetch('/api/cmd', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({cmd})}).then(r=>r.json());
+    box.textContent = (box.textContent ? box.textContent + '\n' : '')
+      + '> ' + cmd + '\n' + (j.out || '(no output)');
+    box.scrollTop = box.scrollHeight;
+    if(!quiet) toast(cmd);
+    updUi(j.ui);
+    refresh(false);          // pull back the new state so highlights update
+    return j.out;
+  }catch(e){ toast('Command failed'); }
+}
+// Highlight whichever option in each Advanced button group is currently active,
+// and print the full protocol/timing state.
+// Rate of late vsyncs since the last poll — if a visible pulse coincides with
+// this ticking up, the cause is frame pacing; if it stays flat, the pulse is
+// coming from the scan side (GCLK gaps) instead.
+let lastLate = null, lastLateT = 0;
+function lateRate(s){
+  const now = Date.now();
+  let out = '';
+  if(lastLate !== null && now > lastLateT){
+    const per = (s.late - lastLate) / ((now - lastLateT) / 1000);
+    out = `   (${per.toFixed(2)}/s since last poll)`;
+  }
+  lastLate = s.late; lastLateT = now;
+  return out;
+}
+function syncAdvanced(s){
+  const active = {
+    'scan backend parlio': s.scan_backend === 1,
+    'scan backend timer': s.scan_backend === 0,
+    'scan start':         !!s.scan_running,
+    'scan stop':          !s.scan_running,
+    'data backend qspi':   s.data_backend === 1,
+    'data backend bitbang':s.data_backend === 0,
+    'data niborder 1':    s.niborder === 1,
+    'data niborder 0':    s.niborder === 0,
+    'set nlat 128':       s.nlat === 128,
+    'set nlat 127':       s.nlat === 127,
+    'set latchcode 1':    s.latchcode === 1,
+    'set latchcode 0':    s.latchcode === 0,
+    'set gclkstop 1':     s.gclkstop === 1,
+    'set gclkstop 0':     s.gclkstop === 0,
+    'preamble on':        s.preamble_each === 1,
+    'preamble off':       s.preamble_each === 0,
+    'map set mirrorx 1':  s.map_mirrorx === 1,
+    'map set flipy 1':    s.map_flipy === 1,
+    'map set lsbfirst 1': s.map_lsbfirst === 1,
+  };
+  document.querySelectorAll('button.cmd').forEach(b=>{
+    const v = active[b.dataset.cmd];
+    if(v !== undefined) b.classList.toggle('on', v);
+  });
+  const yn = v => v ? 'yes' : 'no';
+  $('#advstate').textContent =
+`render engine  : ${s.ui_active ? 'running (UI owns the panel)' : 'stopped (manual control)'}
+scan backend   : ${s.scan_backend === 1 ? 'PARLIO DMA' : 'bit-bang'}   ${s.scan_running ? 'running' : 'stopped'}${s.scan_hold >= 0 ? '   held on phase ' + s.scan_hold : ''}
+data backend   : ${s.data_backend === 1 ? 'quad-SPI DMA' : 'bit-bang'}   nibble order ${s.niborder}${s.data_backend === 0 ? '   bit-bang halfperiod ' + s.dspeed : ''}
+GCLK           : ${s.gclk_mhz.toFixed(2)} MHz   burst ${s.burst} pulses/phase   gaps ${s.gap1}/${s.gap2}   pad ${s.pad}
+data clock     : ${s.data_mhz.toFixed(2)} MHz
+panel refresh  : ${Math.round(s.refresh_hz)} Hz        frame rate: ${(s.fps_actual||0).toFixed(1)} fps (target ${s.fps}${s.fps_eff < s.fps ? ', auto-limited to ' + s.fps_eff + ' to keep the cadence regular' : ''})
+core 1 (panel) : ${(s.t_pack+s.t_send).toFixed(1)} ms of ${(1000/s.fps).toFixed(1)} ms slot  (pack ${s.t_pack.toFixed(1)} + send ${s.t_send.toFixed(1)})${(s.t_pack+s.t_send) > 1000/s.fps*0.7 ? '   <-- TIGHT: lower fps or raise oc data' : ''}
+core 0 (content): ${s.t_render.toFixed(1)} ms  (runs in parallel; no deadline)
+late vsyncs    : ${s.late} of ${s.frames} frames${lateRate(s)}
+state source   : ${wsAlive ? 'websocket push (2 s)' : 'HTTP fallback poll (10 s)'}   ·   UI build ${UI_BUILD}
+latches/frame  : ${s.nlat}   latch code ${s.latchcode}   GCLK stop at vsync: ${yn(s.gclkstop)}   per-frame config: ${yn(s.preamble_each)}
+mapping        : mirror-X ${yn(s.map_mirrorx)}   flip-Y ${yn(s.map_flipy)}   LSB-first ${yn(s.map_lsbfirst)}
+free heap      : ${(s.heap/1024|0)} KB`;
+}
+function updUi(on){
+  $('#uistate').textContent = on ? 'UI engine: running' : 'UI engine: stopped (manual)';
+  $('#b-ui-on').classList.toggle('on', !!on);
+  $('#b-ui-off').classList.toggle('on', !on);
+}
+document.querySelectorAll('button.cmd').forEach(b=>b.onclick=()=>runCmd(b.dataset.cmd));
+$('#b-run').onclick = ()=>{ const c = $('#cmdline').value.trim(); if(c){ runCmd(c, true);
+  $('#cmdline').value=''; } };
+$('#cmdline').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#b-run').click(); });
+$('#b-ui-off').onclick = ()=>runCmd('ui off');
+$('#b-ui-on').onclick = ()=>runCmd('ui on');
+$('#b-px').onclick = ()=>runCmd(`pat pixel ${+$('#px-x').value} ${+$('#px-y').value}`);
+$('#b-ws').onclick = ()=>runCmd('ws ' + (+$('#w-ws').value));
+$('#b-ww').onclick = ()=>runCmd('ww ' + (+$('#w-ww').value));
+$('#b-wb').onclick = ()=>runCmd('wb ' + $('#w-wb').value);
+$('#b-oc-reset').onclick = ()=>runCmd('oc reset');
+$('#b-oc-fast').onclick = ()=>runCmd('oc fast');
+$('#b-oc-save').onclick = async()=>{ await act('save'); toast('Timing saved to flash'); };
+const ocLive = (el, fn) => el.addEventListener('change', fn);
+ocLive($('#r-gclk'), e=>runCmd('oc gclk ' + e.target.value, true));
+ocLive($('#r-data'), e=>runCmd('oc data ' + e.target.value, true));
+ocLive($('#r-burst'), e=>runCmd('oc burst ' + e.target.value, true));
+ocLive($('#r-pad'), e=>runCmd('oc pad ' + e.target.value, true));
+['#r-gclk','#r-data','#r-burst','#r-pad'].forEach(s=>$(s).addEventListener('input', e=>{
+  const map = {'#r-gclk':['#v-gclk',' MHz'],'#r-data':['#v-data',' MHz'],
+               '#r-burst':['#v-burst',''],'#r-pad':['#v-pad','']};
+  $(map[s][0]).textContent = e.target.value + map[s][1];
+}));
+
+async function refresh(withLists){
+  try{
+    const j = await fetch('/api/state').then(r=>r.json());
+    apply(j, withLists);
+    $('#dot').classList.remove('off');
+  }catch(e){ $('#dot').classList.add('off'); }
+}
+showTab('effects');
+refresh(true);
+// State arrives over the WebSocket; this is only a fallback for when the
+// socket is down. Polling every few seconds was enough network + heap churn
+// on the ESP32 to disturb the panel's frame timing.
+setInterval(()=>{ if(!wsAlive) refresh(false); }, 10000);
+connectWS();
+</script>
+</body>
+</html>
